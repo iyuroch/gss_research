@@ -1,0 +1,225 @@
+---
+title: "Statistical inference with the GSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `gss`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+The GSS gathers data on contemporary American society in order to monitor and explain trends and constants in attitudes, behaviors, and attributes. 
+The sample is a multi-stage area probability sample to the block or segment level. At the block level, however, quota sampling is used with quotas based on sex, age, and employment status. There is the chance of sample biases mainly due to not-at-homes which are not controlled by the quotas. However, in order to reduce this bias, the interviewers are given instructions to canvass and interview only after 3:00 p.m. on weekdays or during the weekend or holidays. 
+The units of selection of the second stage were block groups (BGs) and enumeration districts (EDs). These EDs and BGs were stratified according to race and income before selection. The third stage of selection was that of blocks. The blocks were selected with probabilities proportional to size. In places without block statistics, measures of size for the blocks were obtained by field counting. The average cluster size is five respondents per cluster.
+These implies generalization of sample (to the population of country), but results can be biased with non-responsiveness.
+* * *
+
+## Part 2: Research question
+
+1. I see that there are multiple different groups of hispanic, that might influence socioeconomic status of respondent due to discrimination if there any. To test this hypothesis I came with next questions:
+Is there any variance of hispanic group and socioeconomic index, if yes - what is post-hoc test and which specific group present most variance? Variables to explore: HISPANIC, SEI. Null hypothesis - there are no significant differences between hispanic groups and their socioeconomic index.
+
+2. There are 2 sex: male and female and their marital status which we can divide into 2 main categories: married/never married. By logic we should have equal means of those groups, let's test this hypothesis.
+Is there significant difference between sex marriage and if yes into which interval it falls? Variables to explore: SEX, MARITAL. Null hypothesis - there is no significant difference between males and females marriage.
+
+3. Is there any opinionated difference about income level level differences between black and white?
+Let's find if there is any significant difference between level of opinions whether whites have higher income level than other due to race or not between whites and blacks. Variables to explore: RACE, RACDIF1
+* * *
+
+## Part 3: Exploratory data analysis for Question 1
+
+0. Data transformation:
+To explore first question let's create new subset of original dataframe, consisting of 2 columns of interest and filter out N/A out of dataset:
+
+```{r}
+hisp_socio <- gss %>% select(hispanic, sei) %>% filter(!is.na(hispanic)) %>% filter(!is.na(sei))
+```
+
+1. Type of variable
+Firstly we need to get description of columns
+
+```{r}
+str(hisp_socio)
+```
+
+As we see hispanic is factor and sei is numerical interval data.
+Let's find out which levels of hispanic we have and where lies our interval
+
+```{r}
+sapply(hisp_socio, levels)
+hisp_socio %>% summarize(min(sei), max(sei))
+```
+
+As we can make assumption from the data, each group is independent of each other.
+Let's find out number of elements in each group to filter the lowest part of distribution and have higher significant level as the outcome.
+
+```{r}
+hisp_grouped <- hisp_socio %>% group_by(hispanic) %>% tally() %>% mutate(n=1/n)
+
+hisp_grouped %>% arrange(n) %>% ggplot(aes(x=factor(hispanic, levels=unique(hispanic)), y=n, group=1)) + geom_line(stat="identity")
+```
+
+We see that there are few definitely low sample sizes. Let's find standard deviation of our sample and cut them off.
+
+```{r}
+hisp_distr <- hisp_grouped %>% summarize(sd(n), median(n))
+
+hisp_socio %>% group_by(hispanic) %>% tally() %>% summarize(sd(n), mean(n), n())
+```
+
+Based on power analysis we need sample size to be more than 6 to have 0.05 significance level and power level 0.95 . Let's filter our sample from groups that have < 6 sample size
+
+First we create vector of hispanic that we need to filter out
+
+```{r}
+low_sample_size <- hisp_socio %>% group_by(hispanic) %>% tally() %>% filter(n < 6) %>% pull(hispanic) %>% as.integer()
+```
+
+Then we filter by this vector
+
+```{r}
+hisp_socio <- hisp_socio %>% filter(!as.integer(hispanic) %in% low_sample_size)
+```
+
+Let's check if we have any left with sample size < 6
+
+```{r}
+hisp_socio %>% group_by(hispanic) %>% tally() %>% filter(n<6)
+```
+
+2. Distribution
+Okey, so we will compare box distribution of those categories
+
+```{r}
+ggplot(hisp_socio, aes(x = hispanic, y = sei)) +
+  geom_boxplot(width = 0.5)
+```
+
+All of our groups follow near normal distribution, consist of enough elements and are independent of each other. We can proceed to our ANOVA testing
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk"
+button (green button with orange arrow) above. Make sure that your code is visible
+in the project you submit. Delete this note when before you submit your work.
+
+* * *
+
+## Part 4: Inference for Question 1
+
+We conduct ANOVA testing to check whethere there is any variance between hispanic groups
+
+```{r}
+inference(sei, hispanic, hisp_socio, type='ht', method='theoretical', statistic='mean', alternative='greater', sig_level = 0.05, verbose = FALSE, show_res = TRUE)
+```
+
+
+With - value < 0.0001 we reject NULL hypothesis
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
+button (green button with orange arrow) above. Make sure that your code is visible
+in the project you submit. Delete this note when before you submit your work.
+
+## Part 3: Exploratory data analysis Question 2
+
+0. Data transformation:
+To explore first question let's create new subset of original dataframe, consisting of 2 columns of interest and filter out N/A out of dataset:
+
+```{r}
+marital_sex <- gss %>% select(sex, marital) %>% filter(!is.na(sex)) %>% filter(!is.na(marital))
+```
+
+1. Type of variable
+Firstly we need to get description of columns
+
+```{r}
+str(marital_sex)
+```
+
+As we see sex and marital are factor variables.
+Let's find out which levels of maritage and sex we have.
+
+```{r}
+sapply(marital_sex, levels)
+```
+
+As we can make assumption from the data, each group is independent of each other.
+Let's group all only by 2 levels - married/never married. For this we need to mutate other categories to the married level.
+
+```{r}
+marital_sex <- marital_sex %>% mutate( marital = ifelse(between(as.integer(marital), 2, 4 ), 1,  marital) )
+```
+As result we have 2 levels - ever married/not married.
+Let's find summarization of 2 groups and draw distribution of those levels
+```{r}
+marital_sex %>% group_by(sex, marital) %>% summarize(n=n()) %>% mutate(freq = n / sum(n))
+ggplot(marital_sex, aes(x = sex, fill = factor(marital))) + geom_bar(position="fill")
+```
+As we see we have some difference in marriage level between males and females (females more often unmarried).
+
+## Part 4: Inference for Question 2
+
+For 2 variables independence testing we can use chi-square method, for this we need to find the count of 2 categorical variables and perform chi-square test
+```{r}
+grouped_marital_sex <- as.data.frame.matrix(table(marital_sex))
+prop.table(t(grouped_marital_sex), margin=2)
+chisq.test(grouped_marital_sex)
+```
+With this p value we reject null-hypothesis, so there is reasonable difference between married and unmarried males and females categories.
+Let's do post-hoc Fisher test to find odds ratio for our categories
+
+```{r}
+fisher.test(grouped_marital_sex)
+```
+## Part 3: Exploratory data analysis Question 3
+0. Data transformation:
+Let's create new dataframe that will consist of 2 variables
+
+```{r}
+race_income <- gss %>% select(race, racdif1) %>% filter(!is.na(race)) %>% filter(!is.na(racdif1))
+```
+
+1. Variable type
+
+```{r}
+sapply(race_income, levels)
+```
+
+2. Data distribution
+```{r}
+ggplot(race_income, aes(x = race, fill = factor(racdif1))) + geom_bar(position="fill")
+race_income_matrix <- as.data.frame.matrix(table(race_income))
+```
+
+
+
+As our groups independent of each other, and we have samples big enough we can test if these variables are independent of each other
+
+## Part 4: Inference for Question 3
+```{r}
+chisq.test(race_income_matrix)
+```
+With this low p-value we can reject null hypothesis and conduct that there is significant diffirence between all groups and their thoughts on income level of other groups.
+
